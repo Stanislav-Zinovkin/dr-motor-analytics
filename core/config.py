@@ -7,7 +7,7 @@ NORMS_CACHE_PATH = "/data/processed/current_norms.csv"
 # Left - keys, Right - name collumns from ERP/MES
 
 COLUMN_MAPPING = {
-    "task_id": "id_operacij",
+    "task_id": "id_operacji",
     "user_id": "id_pracownika", # login_pracownika
     "sku": "sku", # towar
     "quantity": "ilosc",

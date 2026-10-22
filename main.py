@@ -2,7 +2,7 @@ import os
 from core.metrics import load_data, get_or_update_sku_norms, calculate_worker_performance
 
 def main():
-    data_path = "data/erp_export_mock.csv"
+    data_path = "data/raw/erp_export_mock.csv"
     
     if not os.path.exists(data_path):
         print(f"[Помилка] Файл не знайдено: {data_path}")
