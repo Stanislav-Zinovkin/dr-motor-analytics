@@ -47,7 +47,8 @@ def get_or_update_sku_norms(df_history: pd.DataFrame, force_recalculate: bool = 
     if not force_recalculate and file_is_valid:
         try:
             norms = pd.read_csv(NORMS_CACHE_PATH)
-            if norms.empty or 'median_seconds_per_unit' not in norms.columns:
+            # Перевіряємо наявність базових колонок (sku та будь-якого показника норми часу)
+            if norms.empty or 'sku' not in norms.columns:
                 file_is_valid = False
         except Exception:
             file_is_valid = False
@@ -57,7 +58,8 @@ def get_or_update_sku_norms(df_history: pd.DataFrame, force_recalculate: bool = 
         
         # TODO (Atomic Writes): Use a temporary file and os.replace() to prevent 
         # reading a partially written CSV file by another concurrent process.
-        norms.to_csv(NORMS_CACHE_PATH, index=False)
+        if norms is not None and not norms.empty:
+            norms.to_csv(NORMS_CACHE_PATH, index=False)
 
     return norms
 

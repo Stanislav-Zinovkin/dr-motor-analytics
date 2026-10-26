@@ -21,23 +21,42 @@ st.markdown("Automated KPI tracking & dynamic SKU norm estimation based on opera
 
 # Sidebar Controls
 st.sidebar.header("🕹️ Data & Control Panel")
-data_source = st.sidebar.file_uploader("Upload ERP Logs (CSV)", type=['csv'])
+
+# Persistent file path to prevent data loss on browser refresh (F5)
+persistent_file_path = "data/raw/last_uploaded.csv"
+os.makedirs(os.path.dirname(persistent_file_path), exist_ok=True)
+
+data_source = st.sidebar.file_uploader("Upload ERP Logs (CSV)", type=['csv'], key="erp_file_uploader")
 force_recalc = st.sidebar.button("🔄 Force Recalculate SKU Norms")
 
-# Load Default Data
-default_mock_path = "data/raw/erp_export_mock.csv"
+# Button to clear session and uploaded file manually from disk when no longer needed
+if os.path.exists(persistent_file_path):
+    if st.sidebar.button("🗑️ Clear Session & File"):
+        try:
+            os.remove(persistent_file_path)
+        except Exception:
+            pass
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+
+# Load Data with persistence logic for browser refresh (F5)
+raw_df = None
 
 if data_source is not None:
     raw_df = pd.read_csv(data_source)
-    st.sidebar.success("Custom ERP file uploaded successfully!")
-elif os.path.exists(default_mock_path):
-    raw_df = pd.read_csv(default_mock_path)
+    raw_df.to_csv(persistent_file_path, index=False)
+    st.sidebar.success("Custom ERP file uploaded and saved!")
+elif os.path.exists(persistent_file_path) and os.path.getsize(persistent_file_path) > 0:
+    raw_df = pd.read_csv(persistent_file_path)
+    st.sidebar.info("Restored previous session data automatically")
+elif os.path.exists("data/raw/erp_export_mock.csv"):
+    raw_df = pd.read_csv("data/raw/erp_export_mock.csv")
     st.sidebar.info("Using default mock ERP dataset")
 else: 
-    raw_df = None
     st.warning("⚠️ No dataset found! Please upload a valid ERP CSV file via the sidebar or place `erp_export_mock.csv` in `data/raw/`.")
 
-if raw_df is not None:
+if raw_df is not None and not raw_df.empty:
     # Step 1: Clean and validate raw operational logs
     clean_df = clean_and_validate_logs(raw_df)
 
@@ -51,7 +70,11 @@ if raw_df is not None:
     st.sidebar.markdown("---")
     st.sidebar.header("📅 Period Selection")
     
-    selected_month = st.sidebar.selectbox("Select Target Month:", available_months if available_months else ["All"])
+    selected_month = st.sidebar.selectbox(
+        "Select Target Month:", 
+        available_months if available_months else ["All"],
+        key="selected_month_key"
+    )
     
     if selected_month != "All":
         current_month_logs = clean_df[clean_df['year_month'] == selected_month]
@@ -76,8 +99,12 @@ if raw_df is not None:
 
     # Worker Filter
     st.sidebar.header("🔍 Worker Filter")
-    worker_list = ["All Workers"] + sorted(worker_kpis['id_pracownika'].astype(str).tolist())
-    selected_worker = st.sidebar.selectbox("Filter by Worker ID:", worker_list)
+    worker_list = ["All Workers"] + sorted(worker_kpis['id_pracownika'].astype(str).tolist()) if not worker_kpis.empty else ["All Workers"]
+    selected_worker = st.sidebar.selectbox(
+        "Filter by Worker ID:", 
+        worker_list,
+        key="selected_worker_key"
+    )
 
     if selected_worker != "All Workers":
         filtered_kpis = worker_kpis[worker_kpis['id_pracownika'].astype(str) == selected_worker]
@@ -126,42 +153,36 @@ if raw_df is not None:
                 min_y = min(daily_kpi['performance_kpi'].min() * 0.9, 50)
                 max_y = max(daily_kpi['performance_kpi'].max() * 1.1, 130)
 
-                def val_to_norm(val):
-                    return max(0.0, min(1.0, (val - min_y) / (max_y - min_y)))
+                # Assign color to each point based on KPI threshold rules
+                def get_color(val):
+                    if val < 90:
+                        return '#DC2626'  # Red
+                    elif val <= 110:
+                        return '#D97706'  # Orange/Amber
+                    else:
+                        return '#16A34A'  # Green
 
-                p_90 = val_to_norm(90)
-                p_110 = val_to_norm(110)
+                point_colors = daily_kpi['performance_kpi'].apply(get_color).tolist()
 
-                # Колірна шкала: Червоний (<90), Помаранчевий (90-110), Зелений (>110)
-                custom_colorscale = [
-                    [0.0, '#DC2626'],
-                    [p_90, '#DC2626'],
-                    [p_90, '#D97706'],
-                    [p_110, '#D97706'],
-                    [p_110, '#16A34A'],
-                    [1.0, '#16A34A']
-                ]
+                # Add line segments with matching colors
+                for i in range(len(daily_kpi) - 1):
+                    fig_line.add_trace(go.Scatter(
+                        x=daily_kpi['date'].iloc[i:i+2],
+                        y=daily_kpi['performance_kpi'].iloc[i:i+2],
+                        mode='lines',
+                        line=dict(color=point_colors[i], width=3),
+                        showlegend=False,
+                        hoverinfo='skip'
+                    ))
 
-                # Main trend line with dynamic colors
+                # Add markers on top
                 fig_line.add_trace(go.Scatter(
                     x=daily_kpi['date'],
                     y=daily_kpi['performance_kpi'],
-                    mode='lines+markers',
+                    mode='markers',
                     name='Daily Average KPI',
-                    line=dict(
-                        color=daily_kpi['performance_kpi'], 
-                        width=3,
-                        colorscale=custom_colorscale,
-                        cmin=min_y,
-                        cmax=max_y
-                    ),
-                    marker=dict(
-                        size=8,
-                        color=daily_kpi['performance_kpi'],
-                        colorscale=custom_colorscale,
-                        cmin=min_y,
-                        cmax=max_y
-                    )
+                    marker=dict(size=8, color=point_colors),
+                    hovertemplate='Date: %{x|%Y-%m-%d}<br>KPI: %{y:.1f}%<extra></extra>'
                 ))
 
                 # Threshold lines
@@ -198,11 +219,11 @@ if raw_df is not None:
             else:
                 return 'background-color: #DCFCE7; color: #166534; font-weight: bold;'
 
-        styled_kpis = filtered_kpis.style.map(highlight_kpi, subset=['avg_kpi'])
+        styled_kpis = filtered_kpis.style.map(highlight_kpi, subset=['avg_kpi']) if not filtered_kpis.empty else filtered_kpis
 
         st.dataframe(styled_kpis, use_container_width=True)
 
-        csv_report = filtered_kpis.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
+        csv_report = filtered_kpis.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig') if not filtered_kpis.empty else b""
         st.download_button(
             label="📥 Download Monthly KPI Report (CSV)",
             data=csv_report,
@@ -217,3 +238,5 @@ if raw_df is not None:
     with tab3:
         st.subheader("Filtered Operational Dataset")
         st.dataframe(filtered_logs.head(100), use_container_width=True)
+else:
+    st.info("Please upload a CSV file via the sidebar to initialize the analytics engine.")
