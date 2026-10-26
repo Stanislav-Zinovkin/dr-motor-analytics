@@ -123,32 +123,60 @@ if raw_df is not None:
             if not daily_kpi.empty:
                 fig_line = go.Figure()
 
-                # Main trend line
+                min_y = min(daily_kpi['performance_kpi'].min() * 0.9, 50)
+                max_y = max(daily_kpi['performance_kpi'].max() * 1.1, 130)
+
+                def val_to_norm(val):
+                    return max(0.0, min(1.0, (val - min_y) / (max_y - min_y)))
+
+                p_90 = val_to_norm(90)
+                p_110 = val_to_norm(110)
+
+                # Колірна шкала: Червоний (<90), Помаранчевий (90-110), Зелений (>110)
+                custom_colorscale = [
+                    [0.0, '#DC2626'],
+                    [p_90, '#DC2626'],
+                    [p_90, '#D97706'],
+                    [p_110, '#D97706'],
+                    [p_110, '#16A34A'],
+                    [1.0, '#16A34A']
+                ]
+
+                # Main trend line with dynamic colors
                 fig_line.add_trace(go.Scatter(
                     x=daily_kpi['date'],
                     y=daily_kpi['performance_kpi'],
                     mode='lines+markers',
                     name='Daily Average KPI',
-                    line=dict(color='#1F2937', width=3),
-                    marker=dict(size=8)
+                    line=dict(
+                        color=daily_kpi['performance_kpi'], 
+                        width=3,
+                        colorscale=custom_colorscale,
+                        cmin=min_y,
+                        cmax=max_y
+                    ),
+                    marker=dict(
+                        size=8,
+                        color=daily_kpi['performance_kpi'],
+                        colorscale=custom_colorscale,
+                        cmin=min_y,
+                        cmax=max_y
+                    )
                 ))
 
                 # Threshold lines
                 fig_line.add_hline(y=110, line_dash="dash", line_color="#16A34A", annotation_text="High Norm (110%)", annotation_position="top left")
                 fig_line.add_hline(y=90, line_dash="dash", line_color="#DC2626", annotation_text="Min Norm (90%)", annotation_position="bottom left")
 
-                max_y = max(daily_kpi['performance_kpi'].max() * 1.1, 130)
-                min_y = min(daily_kpi['performance_kpi'].min() * 0.9, 50)
-
                 # Colored Background Zones
                 fig_line.update_layout(
                     shapes=[
                         dict(type="rect", xref="paper", yref="y", x0=0, x1=1, y0=115, y1=max_y,
-                             fillcolor="#DCFCE7", opacity=0.4, layer="below", line_width=0),
+                             fillcolor="#DCFCE7", opacity=0.3, layer="below", line_width=0),
                         dict(type="rect", xref="paper", yref="y", x0=0, x1=1, y0=85, y1=115,
-                             fillcolor="#FEF3C7", opacity=0.4, layer="below", line_width=0),
+                             fillcolor="#FEF3C7", opacity=0.3, layer="below", line_width=0),
                         dict(type="rect", xref="paper", yref="y", x0=0, x1=1, y0=min_y, y1=85,
-                             fillcolor="#FEE2E2", opacity=0.4, layer="below", line_width=0),
+                             fillcolor="#FEE2E2", opacity=0.3, layer="below", line_width=0),
                     ],
                     height=380,
                     margin=dict(l=20, r=20, t=30, b=20),
