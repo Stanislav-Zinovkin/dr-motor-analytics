@@ -97,7 +97,7 @@ def calculate_worker_performance(df: pd.DataFrame, norms: pd.DataFrame) -> pd.Da
     # Aggregate metrics per worker
     # Note: 'id_operacij' explicitly matches COLUMN_MAPPING definition from config
     worker_stats = merged.groupby('id_pracownika').agg(
-        total_tasks=('id_operacij', 'count'),
+        total_tasks=('id_oper', 'count'),
         total_items=('ilosc', 'sum'),
         avg_kpi=('performance_kpi', 'mean')
     ).reset_index()

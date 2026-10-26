@@ -103,12 +103,12 @@ if raw_df is not None:
     st.markdown("---")
 
     # Layout Tabs
-    tab1, tab2, tab3 = tab1, tab2, tab3 = st.tabs(["📊 Executive Overview (Trend & Zones)", "🏷️ SKU Norms Catalog", "🔍 Operational Logs"])
+    tab1, tab2, tab3 = st.tabs(["📊 Executive Overview (Trend & Zones)", "🏷️ SKU Norms Catalog", "🔍 Operational Logs"])
 
     with tab1:
         st.subheader("Warehouse Performance Trend & Zones")
 
-        # Daily KPI Trend Chart with Color Zones ($X/Y Line Chart)
+        # Daily KPI Trend Chart with Color Zones
         if 'czas_start' in filtered_logs.columns and not filtered_logs.empty:
             daily_merged = filtered_logs.merge(norms_df, on="sku", how="left")
             daily_merged['median_minutes_per_unit'] = daily_merged['median_minutes_per_unit'].fillna(1.0)
@@ -143,13 +143,10 @@ if raw_df is not None:
                 # Colored Background Zones
                 fig_line.update_layout(
                     shapes=[
-                        # Green Zone (>115%)
                         dict(type="rect", xref="paper", yref="y", x0=0, x1=1, y0=115, y1=max_y,
                              fillcolor="#DCFCE7", opacity=0.4, layer="below", line_width=0),
-                        # Amber / Normal Zone (85-115%)
                         dict(type="rect", xref="paper", yref="y", x0=0, x1=1, y0=85, y1=115,
                              fillcolor="#FEF3C7", opacity=0.4, layer="below", line_width=0),
-                        # Red Zone (<85%)
                         dict(type="rect", xref="paper", yref="y", x0=0, x1=1, y0=min_y, y1=85,
                              fillcolor="#FEE2E2", opacity=0.4, layer="below", line_width=0),
                     ],
@@ -165,20 +162,18 @@ if raw_df is not None:
         st.markdown("---")
         st.subheader("Detailed Worker Breakdown")
 
-        # Custom high-contrast row styling function
         def highlight_kpi(val):
             if val < 85:
-                return 'background-color: #FEE2E2; color: #991B1B; font-weight: bold;'  # Bright light red + dark red text
+                return 'background-color: #FEE2E2; color: #991B1B; font-weight: bold;'
             elif val <= 115:
-                return 'background-color: #FEF3C7; color: #92400E; font-weight: bold;'  # Bright light amber + brown text
+                return 'background-color: #FEF3C7; color: #92400E; font-weight: bold;'
             else:
-                return 'background-color: #DCFCE7; color: #166534; font-weight: bold;'  # Bright light green + dark green text
+                return 'background-color: #DCFCE7; color: #166534; font-weight: bold;'
 
         styled_kpis = filtered_kpis.style.map(highlight_kpi, subset=['avg_kpi'])
 
         st.dataframe(styled_kpis, use_container_width=True)
 
-        # Download Report
         csv_report = filtered_kpis.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
         st.download_button(
             label="📥 Download Monthly KPI Report (CSV)",
