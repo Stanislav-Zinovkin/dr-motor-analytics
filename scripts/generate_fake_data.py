@@ -44,7 +44,7 @@ def generate_mock_data(start="2026-09-01", days=60, n_workers=45, n_skus=100,
                     t = add(emp, "Pauza", "", 0, t, 30)
                     lunch_done = True
                     continue
-                op = rng.choices(["Konfekcja", "Pick", "Montaż"], weights=[88, 6, 6])[0]
+                op = rng.choices(["Konfekcja", "Montaż"], weights=[94, 6])[0]
                 sku = rng.choice(skus)
                 qty = rng.randint(1, 15)
                 if op == "Konfekcja":

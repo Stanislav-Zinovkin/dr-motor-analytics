@@ -53,12 +53,12 @@ elif os.path.exists(persistent_file_path) and os.path.getsize(persistent_file_pa
 elif os.path.exists("data/raw/erp_export_mock.csv"):
     raw_df = pd.read_csv("data/raw/erp_export_mock.csv")
     st.sidebar.info("Using default mock ERP dataset")
-else: 
+else:
     st.warning("⚠️ No dataset found! Please upload a valid ERP CSV file via the sidebar or place `erp_export_mock.csv` in `data/raw/`.")
 
 if raw_df is not None and not raw_df.empty:
-    # Step 1: Clean and validate raw operational logs
-    clean_df = clean_and_validate_logs(raw_df)
+    # Step 1: Clean and validate raw operational logs with report enabled
+    clean_df, cleaning_report = clean_and_validate_logs(raw_df, return_report=True)
 
     # Step 2: Retrieve cached SKU norms or recalculate medians
     norms_df = get_or_update_sku_norms(clean_df, force_recalculate=force_recalc)
@@ -69,16 +69,16 @@ if raw_df is not None and not raw_df.empty:
 
     st.sidebar.markdown("---")
     st.sidebar.header("📅 Period Selection")
-    
+
     selected_month = st.sidebar.selectbox(
-        "Select Target Month:", 
+        "Select Target Month:",
         available_months if available_months else ["All"],
         key="selected_month_key"
     )
-    
+
     if selected_month != "All":
         current_month_logs = clean_df[clean_df['year_month'] == selected_month]
-        
+
         # Previous month calculation for comparison
         month_idx = available_months.index(selected_month)
         has_prev_month = month_idx < len(available_months) - 1
@@ -89,7 +89,7 @@ if raw_df is not None and not raw_df.empty:
 
     # Step 4: Calculate KPIs
     worker_kpis = calculate_worker_performance(current_month_logs, norms_df)
-    
+
     prev_avg_kpi = None
     if prev_month:
         prev_month_logs = clean_df[clean_df['year_month'] == prev_month]
@@ -101,7 +101,7 @@ if raw_df is not None and not raw_df.empty:
     st.sidebar.header("🔍 Worker Filter")
     worker_list = ["All Workers"] + sorted(worker_kpis['id_pracownika'].astype(str).tolist()) if not worker_kpis.empty else ["All Workers"]
     selected_worker = st.sidebar.selectbox(
-        "Filter by Worker ID:", 
+        "Filter by Worker ID:",
         worker_list,
         key="selected_worker_key"
     )
@@ -117,15 +117,31 @@ if raw_df is not None and not raw_df.empty:
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Processed Operations", f"{len(filtered_logs):,}")
     col2.metric("Active Catalog SKUs", f"{len(norms_df):,}")
-    
+
     avg_warehouse_kpi = round(filtered_kpis['avg_kpi'].mean(), 1) if not filtered_kpis.empty else 0
     kpi_delta = round(avg_warehouse_kpi - prev_avg_kpi, 1) if prev_avg_kpi is not None else None
-    
+
     col3.metric(
-        label=f"Average Warehouse KPI ({selected_month})", 
-        value=f"{avg_warehouse_kpi}%", 
+        label=f"Average Warehouse KPI ({selected_month})",
+        value=f"{avg_warehouse_kpi}%",
         delta=f"{kpi_delta}% vs {prev_month}" if kpi_delta is not None else None
     )
+
+    # --- Data Hygiene & Validator Report Expander ---
+    with st.expander("📊 Data Hygiene & Cleaning Report (Validator)", expanded=False):
+        rep_col1, rep_col2 = st.columns(2)
+        with rep_col1:
+            st.metric("Total rows in raw export", f"{cleaning_report.get('input_rows', 0):,}")
+            st.metric("Successfully selected for analysis", f"{cleaning_report.get('kept_rows', 0):,}")
+        with rep_col2:
+            st.markdown("**Filtered out by criteria:**")
+            st.text(f"• Duplicates: {cleaning_report.get('duplicates', 0)}")
+            st.text(f"• Other operation types: {cleaning_report.get('other_operation_types', 0)}")
+            st.text(f"• Missing keys (SKU/ID): {cleaning_report.get('missing_keys', 0)}")
+            st.text(f"• Bad timestamps (Start/Stop): {cleaning_report.get('bad_timestamp', 0)}")
+            st.text(f"• Incorrect quantity: {cleaning_report.get('bad_quantity', 0)}")
+            st.text(f"• Too short or negative duration: {cleaning_report.get('too_short_or_negative', 0)}")
+            st.text(f"• Too long (forgot Stop): {cleaning_report.get('too_long', 0)}")
 
     st.markdown("---")
 
@@ -232,7 +248,7 @@ if raw_df is not None and not raw_df.empty:
         )
 
     with tab2:
-        st.subheader("Dynamic SKU Norms (3-Month Median)")
+        st.subheader("Dynamic SKU Norms (Median)")
         st.dataframe(norms_df, use_container_width=True)
 
     with tab3:

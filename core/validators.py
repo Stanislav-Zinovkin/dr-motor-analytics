@@ -1,5 +1,4 @@
 import unicodedata
-
 import pandas as pd
 
 from core.config import (
@@ -34,9 +33,18 @@ def _normalize_text(series: pd.Series) -> pd.Series:
 
 
 def _parse_datetime(series: pd.Series) -> pd.Series:
+    """
+    Parses timestamps. If DATETIME_FORMAT is explicitly defined in config, uses it.
+    Otherwise, or if mixed formats are possible, falls back to flexible parsing.
+    """
     if DATETIME_FORMAT:
-        return pd.to_datetime(series, format=DATETIME_FORMAT, errors="coerce")
-    return pd.to_datetime(series, dayfirst=True, errors="coerce")
+        parsed = pd.to_datetime(series, format=DATETIME_FORMAT, errors="coerce")
+        mask_failed = parsed.isna() & series.notna() & (series.astype(str).str.strip() != "")
+        if mask_failed.any():
+            parsed.loc[mask_failed] = pd.to_datetime(series[mask_failed], format="mixed", dayfirst=True, errors="coerce")
+        return parsed
+    
+    return pd.to_datetime(series, format="mixed", dayfirst=True, errors="coerce")
 
 
 def clean_and_validate_logs(df: pd.DataFrame, return_report: bool = False):
@@ -47,7 +55,7 @@ def clean_and_validate_logs(df: pd.DataFrame, return_report: bool = False):
     that removes it, so the report adds up exactly:
     input_rows - (all removed counts) = kept_rows.
 
-    Returns the cleaned DataFrame (same as before). With return_report=True
+    Returns the cleaned DataFrame. With return_report=True
     returns (DataFrame, report_dict); see CLEANING_REPORT_LABELS for the keys.
     """
     d = df.reset_index(drop=True).copy()
@@ -69,7 +77,6 @@ def clean_and_validate_logs(df: pd.DataFrame, return_report: bool = False):
         keep_only(_normalize_text(d[OPERATION_TYPE_COLUMN]).isin(allowed), "other_operation_types")
     else:
         report["other_operation_types"] = 0
-    # True = filter is configured but the column is missing, so nothing was filtered
     report["operation_filter_skipped"] = bool(NORM_OPERATION_TYPES) and not can_filter
 
     # 3. Keys: strip spaces, drop rows without SKU or worker ID
